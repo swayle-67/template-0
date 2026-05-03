@@ -1,0 +1,64 @@
+{% extends "layout.html" %}
+{% block body %}
+
+{% if not q %}
+<div class="hero">
+    <h1>Find your perfect stay</h1>
+    <p>Discover unique places to stay around the world</p>
+    <form class="hero-search" action="/" method="get">
+        <input name="q" placeholder="Where are you going?" type="text">
+        <button type="submit">Search</button>
+    </form>
+</div>
+{% endif %}
+
+<div class="page-header">
+    <h1 class="section-title">
+        {% if q %}
+            Results for "{{ q }}"
+        {% else %}
+            All Listings
+        {% endif %}
+    </h1>
+    {% if session.get("user_id") %}
+        <a class="btn btn-primary" href="/create">+ List your place</a>
+    {% endif %}
+</div>
+
+{% if listings %}
+    <div class="listings-grid">
+        {% for listing in listings %}
+        <a class="listing-card" href="/listings/{{ listing.id }}">
+            <div class="listing-card-img">
+                {% if listing.image_url %}
+                    <img src="{{ listing.image_url }}" alt="{{ listing.title }}">
+                {% else %}
+                    &#127968;
+                {% endif %}
+            </div>
+            <div class="listing-card-body">
+                <div class="listing-card-location">{{ listing.location }}</div>
+                <div class="listing-card-title">{{ listing.title }}</div>
+                <div class="listing-card-host">Hosted by {{ listing.username }}</div>
+                <div class="listing-card-footer">
+                    <div class="listing-card-price">
+                        ${{ "%.2f"|format(listing.price) }} <span>/ night</span>
+                    </div>
+                    <span class="btn btn-outline btn-sm">View</span>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">
+        <p>No listings found{% if q %} for "{{ q }}"{% endif %}.</p>
+        {% if session.get("user_id") %}
+            <a class="btn btn-primary" href="/create">Create the first one</a>
+        {% else %}
+            <a class="btn btn-outline" href="/register">Sign up to list your place</a>
+        {% endif %}
+    </div>
+{% endif %}
+
+{% endblock %}

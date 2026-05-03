@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+{% block body %}
+
+<div class="page-header">
+    <h1>My Bookings</h1>
+    <a class="btn btn-outline" href="/">Browse listings</a>
+</div>
+
+{% if bookings %}
+    <table class="bookings-table">
+        <thead>
+            <tr>
+                <th>Listing</th>
+                <th>Location</th>
+                <th>Check-in</th>
+                <th>Check-out</th>
+                <th>Price/night</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for b in bookings %}
+            <tr>
+                <td>
+                    <a href="/listings/{{ b.listing_id }}" style="color: var(--primary); font-weight: 600;">
+                        {{ b.title }}
+                    </a>
+                </td>
+                <td>{{ b.location }}</td>
+                <td>{{ b.check_in }}</td>
+                <td>{{ b.check_out }}</td>
+                <td>${{ "%.2f"|format(b.price) }}</td>
+                <td><span class="badge badge-green">Confirmed</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <div class="empty-state">
+        <p>You haven't made any bookings yet.</p>
+        <a class="btn btn-primary" href="/">Find a place to stay</a>
+    </div>
+{% endif %}
+
+{% endblock %}

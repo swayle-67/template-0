@@ -1,0 +1,137 @@
+{% extends "layout.html" %}
+{% block body %}
+
+<a class="btn btn-outline btn-sm" href="/" style="display:inline-block; margin-bottom:24px;">&#8592; Back to listings</a>
+
+<div class="listing-detail">
+
+    <div>
+        <div class="listing-detail-img">
+            {% if listing.image_url %}
+                <img src="{{ listing.image_url }}" alt="{{ listing.title }}">
+            {% else %}
+                &#127968;
+            {% endif %}
+        </div>
+
+        <h1>{{ listing.title }}</h1>
+
+        <div class="listing-meta">
+            <div class="listing-meta-item">&#128205; {{ listing.location }}</div>
+            <div class="listing-meta-item">&#128101; Up to {{ listing.guests }} guest{% if listing.guests != 1 %}s{% endif %}</div>
+            <div class="listing-meta-item">&#128100; Hosted by {{ listing.username }}</div>
+            {% if avg_rating %}
+                <div class="listing-meta-item">&#11088; {{ avg_rating }} ({{ reviews|length }} review{% if reviews|length != 1 %}s{% endif %})</div>
+            {% endif %}
+        </div>
+
+        <div class="listing-description">
+            {{ listing.description }}
+        </div>
+
+        {% if session.get("user_id") and session.get("user_id") == listing.user_id %}
+            <form action="/delete/{{ listing.id }}" method="post" onsubmit="return confirm('Delete this listing?')">
+                <button class="btn btn-danger btn-sm" type="submit">Delete listing</button>
+            </form>
+        {% endif %}
+
+        <div class="reviews-section">
+            <h2>
+                {% if reviews %}
+                    &#11088; {{ avg_rating }} &middot; {{ reviews|length }} review{% if reviews|length != 1 %}s{% endif %}
+                {% else %}
+                    No reviews yet
+                {% endif %}
+            </h2>
+
+            {% for r in reviews %}
+            <div class="review-card">
+                <div class="review-card-header">
+                    <span class="review-card-author">{{ r.username }}</span>
+                    <span class="stars">
+                        {% for i in range(r.rating) %}&#9733;{% endfor %}{% for i in range(5 - r.rating) %}&#9734;{% endfor %}
+                    </span>
+                </div>
+                {% if r.comment %}
+                    <div class="review-card-comment">{{ r.comment }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            {% if session.get("user_id") and session.get("user_id") != listing.user_id and not already_reviewed %}
+            <div class="review-form">
+                <h3>Leave a review</h3>
+                <form action="/review/{{ listing.id }}" method="post">
+                    <div class="star-rating">
+                        <input type="radio" id="s5" name="rating" value="5">
+                        <label for="s5">&#9733;</label>
+                        <input type="radio" id="s4" name="rating" value="4">
+                        <label for="s4">&#9733;</label>
+                        <input type="radio" id="s3" name="rating" value="3">
+                        <label for="s3">&#9733;</label>
+                        <input type="radio" id="s2" name="rating" value="2">
+                        <label for="s2">&#9733;</label>
+                        <input type="radio" id="s1" name="rating" value="1">
+                        <label for="s1">&#9733;</label>
+                    </div>
+                    <div class="form-group">
+                        <textarea name="comment" placeholder="Share your experience (optional)"></textarea>
+                    </div>
+                    <button class="btn btn-primary btn-sm" type="submit">Submit review</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div>
+        <div class="booking-card">
+            <div class="booking-card-price">
+                ${{ "%.2f"|format(listing.price) }} <span>/ night</span>
+            </div>
+
+            {% if session.get("user_id") %}
+                {% if session.get("user_id") != listing.user_id %}
+                    <form action="/book/{{ listing.id }}" method="post">
+                        <div class="form-group">
+                            <label>Check-in</label>
+                            <input id="check_in" name="check_in" type="date" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Check-out</label>
+                            <input id="check_out" name="check_out" type="date" required>
+                        </div>
+                        <button class="btn btn-primary" style="width:100%;" type="submit">Reserve</button>
+                    </form>
+
+                    <script>
+                        const today = new Date().toISOString().split('T')[0];
+                        const checkIn = document.getElementById('check_in');
+                        const checkOut = document.getElementById('check_out');
+
+                        checkIn.min = today;
+                        checkOut.min = today;
+
+                        checkIn.addEventListener('change', function() {
+                            const next = new Date(this.value);
+                            next.setDate(next.getDate() + 1);
+                            const nextStr = next.toISOString().split('T')[0];
+                            checkOut.min = nextStr;
+                            if (!checkOut.value || checkOut.value <= this.value) {
+                                checkOut.value = nextStr;
+                            }
+                        });
+                    </script>
+                {% else %}
+                    <p style="color: var(--muted); font-size: 0.9rem;">This is your listing.</p>
+                {% endif %}
+            {% else %}
+                <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 12px;">Log in to book this place.</p>
+                <a class="btn btn-primary" href="/login" style="display:block; text-align:center;">Log in</a>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
