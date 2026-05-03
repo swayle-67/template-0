@@ -1,5 +1,6 @@
 import os
-from cs50 import SQL
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from flask import Flask, flash, render_template, request, redirect, session
 from flask_session import Session
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -10,10 +11,27 @@ app = Flask(__name__)
 
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
-app.secret_key = "stayeasy_secret_key"
+app.secret_key = os.environ.get("SECRET_KEY", "stayeasy_secret_key")
 Session(app)
 
-db = SQL("sqlite:///airbnb.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+def get_db():
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    return conn
+
+def db_execute(query, *args):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(query, args if args else None)
+    conn.commit()
+    try:
+        results = cur.fetchall()
+    except Exception:
+        results = []
+    cur.close()
+    conn.close()
+    return [dict(row) for row in results]
 
 
 @app.context_processor
@@ -40,11 +58,11 @@ def register():
         hash_pw = generate_password_hash(password)
 
         try:
-            db.execute(
-                "INSERT INTO users (username, hash) VALUES (?, ?)",
+            db_execute(
+                "INSERT INTO users (username, hash) VALUES (%s, %s)",
                 username, hash_pw
             )
-        except:
+        except Exception:
             return apology("username already taken")
 
         flash("Account created! Please log in.", "success")
@@ -67,7 +85,7 @@ def login():
         if not username or not password:
             return apology("missing fields")
 
-        rows = db.execute("SELECT * FROM users WHERE username = ?", username)
+        rows = db_execute("SELECT * FROM users WHERE username = %s", username)
 
         if len(rows) != 1 or not check_password_hash(rows[0]["hash"], password):
             return apology("invalid username or password")
@@ -92,14 +110,14 @@ def index():
     q = request.args.get("q", "").strip()
 
     if q:
-        listings = db.execute("""
+        listings = db_execute("""
             SELECT listings.*, users.username
             FROM listings
             JOIN users ON users.id = listings.user_id
-            WHERE listings.title LIKE ? OR listings.location LIKE ?
+            WHERE listings.title LIKE %s OR listings.location LIKE %s
         """, f"%{q}%", f"%{q}%")
     else:
-        listings = db.execute("""
+        listings = db_execute("""
             SELECT listings.*, users.username
             FROM listings
             JOIN users ON users.id = listings.user_id
@@ -111,11 +129,11 @@ def index():
 
 @app.route("/listings/<int:listing_id>")
 def listing_detail(listing_id):
-    rows = db.execute("""
+    rows = db_execute("""
         SELECT listings.*, users.username
         FROM listings
         JOIN users ON users.id = listings.user_id
-        WHERE listings.id = ?
+        WHERE listings.id = %s
     """, listing_id)
 
     if not rows:
@@ -123,11 +141,11 @@ def listing_detail(listing_id):
 
     listing = rows[0]
 
-    reviews = db.execute("""
+    reviews = db_execute("""
         SELECT reviews.*, users.username
         FROM reviews
         JOIN users ON users.id = reviews.user_id
-        WHERE reviews.listing_id = ?
+        WHERE reviews.listing_id = %s
         ORDER BY reviews.id DESC
     """, listing_id)
 
@@ -137,8 +155,8 @@ def listing_detail(listing_id):
 
     already_reviewed = False
     if session.get("user_id"):
-        existing = db.execute(
-            "SELECT id FROM reviews WHERE user_id = ? AND listing_id = ?",
+        existing = db_execute(
+            "SELECT id FROM reviews WHERE user_id = %s AND listing_id = %s",
             session["user_id"], listing_id
         )
         already_reviewed = len(existing) > 0
@@ -180,9 +198,9 @@ def create():
         except ValueError:
             guests = 1
 
-        db.execute("""
+        db_execute("""
             INSERT INTO listings (user_id, title, description, price, location, guests, image_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, session["user_id"], title, description, price, location, guests, image_url)
 
         flash("Listing created successfully!", "success")
@@ -194,14 +212,14 @@ def create():
 @app.route("/delete/<int:listing_id>", methods=["POST"])
 @login_required
 def delete_listing(listing_id):
-    rows = db.execute("SELECT user_id FROM listings WHERE id = ?", listing_id)
+    rows = db_execute("SELECT user_id FROM listings WHERE id = %s", listing_id)
 
     if not rows or rows[0]["user_id"] != session["user_id"]:
         return apology("not authorized", 403)
 
-    db.execute("DELETE FROM bookings WHERE listing_id = ?", listing_id)
-    db.execute("DELETE FROM reviews WHERE listing_id = ?", listing_id)
-    db.execute("DELETE FROM listings WHERE id = ?", listing_id)
+    db_execute("DELETE FROM bookings WHERE listing_id = %s", listing_id)
+    db_execute("DELETE FROM reviews WHERE listing_id = %s", listing_id)
+    db_execute("DELETE FROM listings WHERE id = %s", listing_id)
 
     flash("Listing deleted.", "info")
     return redirect("/")
@@ -210,7 +228,7 @@ def delete_listing(listing_id):
 @app.route("/book/<int:listing_id>", methods=["POST"])
 @login_required
 def book(listing_id):
-    rows = db.execute("SELECT * FROM listings WHERE id = ?", listing_id)
+    rows = db_execute("SELECT * FROM listings WHERE id = %s", listing_id)
 
     if not rows:
         return apology("listing not found", 404)
@@ -227,9 +245,9 @@ def book(listing_id):
     if check_in >= check_out:
         return apology("check-out must be after check-in")
 
-    db.execute("""
+    db_execute("""
         INSERT INTO bookings (user_id, listing_id, check_in, check_out)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
     """, session["user_id"], listing_id, check_in, check_out)
 
     flash("Booking confirmed!", "success")
@@ -239,11 +257,11 @@ def book(listing_id):
 @app.route("/bookings")
 @login_required
 def bookings():
-    user_bookings = db.execute("""
+    user_bookings = db_execute("""
         SELECT bookings.*, listings.title, listings.location, listings.price, listings.image_url
         FROM bookings
         JOIN listings ON listings.id = bookings.listing_id
-        WHERE bookings.user_id = ?
+        WHERE bookings.user_id = %s
         ORDER BY bookings.check_in DESC
     """, session["user_id"])
 
@@ -253,13 +271,13 @@ def bookings():
 @app.route("/review/<int:listing_id>", methods=["POST"])
 @login_required
 def review(listing_id):
-    rows = db.execute("SELECT id FROM listings WHERE id = ?", listing_id)
+    rows = db_execute("SELECT id FROM listings WHERE id = %s", listing_id)
 
     if not rows:
         return apology("listing not found", 404)
 
-    existing = db.execute(
-        "SELECT id FROM reviews WHERE user_id = ? AND listing_id = ?",
+    existing = db_execute(
+        "SELECT id FROM reviews WHERE user_id = %s AND listing_id = %s",
         session["user_id"], listing_id
     )
 
@@ -280,9 +298,9 @@ def review(listing_id):
     except ValueError:
         return apology("invalid rating")
 
-    db.execute("""
+    db_execute("""
         INSERT INTO reviews (user_id, listing_id, rating, comment)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
     """, session["user_id"], listing_id, rating, comment)
 
     flash("Review submitted!", "success")
